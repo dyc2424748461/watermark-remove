@@ -139,8 +139,7 @@ def remove_watermark():
         # 更新进度条
         progress = int(doc_out.page_count/doc_len*progressbar_len)
         update_progress(progress)
-        # 将页面添加到PDF文档中
-        # doc_out.insert_page(doc_out.page_count)
+
 
     # 保存PDF文件
     doc_out.save(output_pdf_path)
