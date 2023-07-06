@@ -55,7 +55,7 @@ def update_image():
     page = doc.load_page(current_page)
 
     # 将页面转换为图像
-    pix = page.get_pixmap()
+    pix = page.get_pixmap(dpi=200,alpha=False)
     img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
 
     # 对图像进行处理
@@ -96,7 +96,7 @@ def remove_watermark():
         page = doc.load_page(page_number)
 
         # 将页面转换为图像
-        pix = page.get_pixmap()
+        pix = page.get_pixmap(dpi=200,alpha=False)
         img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
         img = img.convert("RGB")  # 将图像转换为RGB模式
 
