@@ -55,7 +55,7 @@ def update_image():
     page = doc.load_page(current_page)
 
     # 将页面转换为图像
-    pix = page.get_pixmap(dpi=200,alpha=False)
+    pix = page.get_pixmap()
     img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
 
     # 对图像进行处理
