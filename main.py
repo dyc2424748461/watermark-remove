@@ -1,14 +1,23 @@
 import tkinter as tk
 from tkinter import filedialog
-import fitz
 import cv2
+import fpdf
 from PIL import ImageTk, Image
 import numpy as np
 import tempfile
 from tkinter import ttk
-
+import threading
+import fitz
+from fpdf import FPDF
+# 使用fitz进行读取
+# 使用fpdf进行合并图片
+"""
+调整高dpi参数可以使得图片更清晰
+同时会消耗大量的内存
+"""
 
 # 全局变量
+dpi = 170
 pdf_path = ""
 output_pdf_path = ""
 current_page = 0
@@ -16,7 +25,13 @@ threshold_value = 128
 progress = 0
 
 def select_pdf_file():
-    global pdf_path, current_page, output_pdf_path
+    """
+    选择文件功能、
+    更新全局pdf_path、
+    重设进度条的maximum
+    :return:
+    """
+    global pdf_path, current_page, output_pdf_path,select_file_pages
 
     # 将进度条更新为0
     update_progress(0)
@@ -34,10 +49,18 @@ def select_pdf_file():
         update_image()
         # 更新页面调节滑块的最大值
         page_slider.config(to=doc.page_count)
+
+        # 更新进度条的总进度变量
+        progressbar.config(maximum=doc.page_count*2)
+
         # 关闭 PDF 文件
         doc.close()
 
 def update_image():
+    """
+    更新ui界面中显示的图像
+    :return:
+    """
     global pdf_path, current_page, threshold_value
 
     # 检查PDF路径是否为空
@@ -79,7 +102,11 @@ def update_image():
     doc.close()
 
 def remove_watermark():
-    global pdf_path, threshold_value, current_page,output_pdf_path
+    """
+    去除水印
+    :return:
+    """
+    global pdf_path, threshold_value, current_page,output_pdf_path,progress
 
     # 检查PDF路径是否为空
     if not pdf_path:
@@ -88,66 +115,125 @@ def remove_watermark():
     # 使用 fitz 打开 PDF 文件
     doc = fitz.open(pdf_path)
 
-    # 保存处理后的图像的列表
-    repaired_images = []
+    # 保存处理后的图像的列表地址
+    temp_image_path_list=[]
+    # 临时文件夹储存临时图片
+    temp_dir = tempfile.TemporaryDirectory(prefix="tmpImage")
+    temp_dir_path = temp_dir.name
 
     for page_number in range(doc.page_count):
         # 加载页面
         page = doc.load_page(page_number)
 
         # 将页面转换为图像
-        pix = page.get_pixmap(dpi=200,alpha=False)
+        pix = page.get_pixmap(dpi=170,)
         img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
         img = img.convert("RGB")  # 将图像转换为RGB模式
 
         # 执行水印去除等处理
         repaired_image = remove_watermark_gray(np.array(img), threshold_value,)
-        repaired_images.append(repaired_image)
-
-    # 关闭 PDF 文件
-    doc.close()
-    # 输入的路径
-    output_pdf_path = pdf_path[:-4]+"_remove-watermark.pdf"
-
-    # 创建一个空的PDF文档对象
-    doc_out = fitz.open()
-    doc_len = len(repaired_images)
-    # 临时文件夹储存临时图片
-    temp_dir = tempfile.TemporaryDirectory(prefix="tmpImage")
-    temp_dir_path = temp_dir.name
-    for repaired_image in repaired_images:
-        # 将修复后的图像转换为PIL.Image.Image对象
-        repaired_img_pil = Image.fromarray(repaired_image)
-
-        # 创建临时文件保存修复后的图像
-        temp_image_file = tempfile.NamedTemporaryFile(suffix=".png", dir=temp_dir_path, delete=False)
-        temp_image_path = temp_image_file.name
-        print(temp_image_path)
-        repaired_img_pil.save(temp_image_path)
-
-        # 打开临时图像文件并创建Pixmap对象
-        img_pixmap = fitz.Pixmap(temp_image_path)
-        # 创建一个新的PDF页面
-        pdf_page = doc_out.new_page(width=img_pixmap.width, height=img_pixmap.height)
-
-        # 将图像插入到PDF页面中
-        pdf_page.insert_image(pdf_page.rect, pixmap=img_pixmap)
-        # pdf_page.add
-        # 关闭临时文件
-        temp_image_file.close()
+        # 保存图片
+        repaired_image_path = save_to_img(repaired_image,temp_dir_path)
+        file_location.set("processing page:"+str(page_number))
 
         # 更新进度条
-        progress = int(doc_out.page_count/doc_len*progressbar_len)
+        progress = progress + 1
         update_progress(progress)
 
+        # 记录所有文件的路径
+        temp_image_path_list.append(repaired_image_path)
+    # 关闭 PDF 文件
+    doc.close()
+
+    # 输出的路径
+    output_pdf_path = pdf_path[:-4]+"_remove-watermark.pdf"
 
     # 保存PDF文件
-    doc_out.save(output_pdf_path)
-    doc_out.close()
-    temp_dir.cleanup()
+    insert_images_to_pdf(temp_image_path_list,output_pdf_path)
+
+    # temp_dir.cleanup()
     file_location.set(output_pdf_path)
     print("PDF生成完成！")
+    select_button.config(state="normal")
 
+
+def insert_images_to_pdf(images_path, output_pdf_path,):
+    """
+    将图片合并为pdf
+    :param images_path:
+    :param output_pdf_path:
+    :return:
+    """
+    global progress
+
+    # 创建一个FPDF对象
+    pdf = FPDF()
+    # 遍历图片路径列表
+    for image_path in images_path:
+        with Image.open(image_path) as img:
+            img_width, img_height = img.size
+            # 计算调整大小后的图像尺寸，保持纵横比(a4大小)
+            # img_width,img_height = adjust_img(pdf,img_width,img_height)
+
+        print("insert " + image_path)
+        # 添加新的页面，并设置页面大小为图片大小
+        pdf.add_page(format=(img_width, img_height))
+        # 将图像插入到PDF中心
+        x = (pdf.w - img_width) / 2
+        y = (pdf.h - img_height) / 2
+        # 将图片添加到页面中，位置为(x, y)，大小为(new_width, new_height)
+        pdf.image(image_path, x=x, y=y, w=img_width, h=img_height)
+
+        # 更新进度条
+        progress = progress+1
+        update_progress(progress)
+    # 保存PDF文件到指定的路径
+    pdf.output(output_pdf_path)
+
+def adjust_img(pdf:fpdf.FPDF,img_width,img_height):
+    # 计算调整大小后的图像尺寸，保持纵横比
+    if img_width > img_height:
+        new_width = pdf.w
+        new_height = int((pdf.w / img_width) * img_height)
+    else:
+        new_height = pdf.h
+        new_width = int((pdf.h / img_height) * img_width)
+    return new_width,new_height
+#
+def remove_watermark_thread():
+    """
+    去除水印线程
+    :return:
+    """
+    select_button.config(state="disable")
+
+    b_thread = threading.Thread(target=remove_watermark, )
+
+    # 启动线程
+    b_thread.start()
+
+    # 等待线程结束
+    b_thread.join()
+
+def save_to_img(repaired_image,temp_dir_path,):
+    """
+    将pdf保存为图片
+    :param repaired_image:
+    :param temp_dir_path:
+    :return:
+    """
+    # 将修复后的图像转换为PIL.Image.Image对象
+    repaired_img_pil = Image.fromarray(repaired_image)
+
+    # 创建临时文件保存修复后的图像
+    temp_image_file = tempfile.NamedTemporaryFile(suffix=".png", dir=temp_dir_path, delete=False)
+    temp_image_path = temp_image_file.name
+    print("生成临时文件地址为:"+ temp_image_path)
+    repaired_img_pil.save(temp_image_path)
+
+    # 关闭临时文件
+    temp_image_file.close()
+    return temp_image_path
 
 
 def show_pdf_page(value):
@@ -167,6 +253,12 @@ def update_threshold(value):
 
 
 def remove_watermark_gray(img, threshold_value,):
+    """
+    将原pdf图像的处理
+    :param img:
+    :param threshold_value:
+    :return:
+    """
     img = np.array(img)
     # 将图像转换为灰度图像
     img_gray = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2GRAY)
@@ -178,8 +270,8 @@ def remove_watermark_gray(img, threshold_value,):
     kernel = np.ones((3, 3), np.uint8)
     eroded_mask = cv2.erode(img_binary, kernel, iterations=2)
     eroded_mask = cv2.GaussianBlur(eroded_mask,(3, 3),0)
-    # 使用修复算法进行水印去除
-    # repaired_image = cv2.inpaint(img, eroded_mask, inpaint_radius, flags=cv2.INPAINT_NS) # 花费时间较长
+
+    # 将遮罩层应用到原图中
     repaired_image = cv2.bitwise_and(img, img, mask=~eroded_mask)
     repaired_image[eroded_mask!=0] =[255,255,255] # 待改进
     return repaired_image
@@ -192,12 +284,19 @@ def update_canvas_size():
 def update_progress(value):
     # 更新进度条的值
     progressbar['value'] = value
-    print(value)
+    print("进度条"+str(value))
     root.update_idletasks()
 
 def on_window_resize(event):
     update_canvas_size()
     update_image()
+
+# 创建线程避免阻塞界面ui
+def thread_it(func,):
+    """ 将函数打包进线程 """
+    myThread = threading.Thread(target=func, )
+    myThread .setDaemon(True)  # 主线程退出就直接让子线程跟随退出,不论是否运行完成。
+    myThread .start()
 
 # 创建主窗口
 root = tk.Tk()
@@ -244,12 +343,12 @@ label = tk.Label(canvas)
 label.place(relx=0.5, rely=0.5, anchor="center")
 
 # 创建Remove Watermark按钮
-remove_watermark_button = tk.Button(root, text="Remove Watermark", command=remove_watermark)
+remove_watermark_button = tk.Button(root, text="Remove Watermark", command=lambda :thread_it(remove_watermark_thread))
 remove_watermark_button.pack(pady=1)
 
 # 创建progressBar
-progressbar_len=300
-progressbar = ttk.Progressbar(root, length=progressbar_len, mode='determinate')
+progressbar_len = 300
+progressbar = ttk.Progressbar(root, length=300, mode='determinate',maximum=progressbar_len)
 progressbar.pack(pady=1)
 
 
