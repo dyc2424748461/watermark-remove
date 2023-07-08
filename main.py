@@ -1,12 +1,15 @@
 import tkinter as tk
 from tkinter import filedialog
-import fitz
 import cv2
 from PIL import ImageTk, Image
 import numpy as np
 import tempfile
 from tkinter import ttk
 import threading
+import fitz
+from fpdf import FPDF
+# 使用fitz进行读取
+# 使用fpdf进行合并图片
 
 # 全局变量
 pdf_path = ""
@@ -16,7 +19,7 @@ threshold_value = 128
 progress = 0
 
 def select_pdf_file():
-    global pdf_path, current_page, output_pdf_path
+    global pdf_path, current_page, output_pdf_path,select_file_pages
 
     # 将进度条更新为0
     update_progress(0)
@@ -34,6 +37,10 @@ def select_pdf_file():
         update_image()
         # 更新页面调节滑块的最大值
         page_slider.config(to=doc.page_count)
+
+        # 更新进度条的总进度变量
+        progressbar.config(maximum=doc.page_count*2)
+
         # 关闭 PDF 文件
         doc.close()
 
@@ -99,7 +106,7 @@ def remove_watermark():
         page = doc.load_page(page_number)
 
         # 将页面转换为图像
-        pix = page.get_pixmap(dpi=200,alpha=False)
+        pix = page.get_pixmap(dpi=170,)
         img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
         img = img.convert("RGB")  # 将图像转换为RGB模式
 
@@ -110,57 +117,61 @@ def remove_watermark():
         file_location.set("processing page:"+str(page_number))
 
         # 更新进度条
-        progress = int((page_number/doc.page_count)*progressbar_len/2)
+        progress = progress + 1
         update_progress(progress)
 
         # 记录所有文件的路径
         temp_image_path_list.append(repaired_image_path)
     # 关闭 PDF 文件
     doc.close()
-    # 输入的路径
+
+    # 输出的路径
     output_pdf_path = pdf_path[:-4]+"_remove-watermark.pdf"
 
-    # 创建一个空的PDF文档对象
-    doc_out = fitz.open()
-    doc_len = len(temp_image_path_list)
-
-
-    for temp_image_path in temp_image_path_list:
-        # 打开临时图像文件并创建Pixmap对象
-        with fitz.Pixmap(temp_image_path) as img_pixmap:
-            img_pixmap = fitz.Pixmap(temp_image_path)
-            # 创建一个新的PDF页面
-            pdf_page = doc_out.new_page(width=img_pixmap.width, height=img_pixmap.height)
-
-            # 将图像插入到PDF页面中
-            pdf_page.insert_image(pdf_page.rect, pixmap=img_pixmap)
-
-        # 终端显示进度
-        print(f"当前页面{doc_out.page_count} ,共{doc_len}")
-
-        # 显示到界面中
-        file_location.set(f"Prepared {doc_out.page_count}//{doc_len}")
-
-        add_progress = int((doc_out.page_count/doc_len)*(progressbar_len/2))
-        update_progress(add_progress+progress)
-
-
     # 保存PDF文件
-    doc_out.save(output_pdf_path)
-    doc_out.close()
-    temp_dir.cleanup()
+    insert_images_to_pdf(temp_image_path_list,output_pdf_path)
+
+    # temp_dir.cleanup()
     file_location.set(output_pdf_path)
     print("PDF生成完成！")
-import asyncio
-import fitz
+    select_button.config(state="normal")
 
-async def save_pdf_async(doc_out, output_pdf_path):
-    # 保存PDF文件
-    await asyncio.sleep(0)  # 允许事件循环切换到其他任务
-    doc_out.save(output_pdf_path)
-    doc_out.close()
 
+def insert_images_to_pdf(images_path, output_pdf_path,):
+    global progress
+
+    # 创建一个FPDF对象
+    pdf = FPDF()
+    # 遍历图片路径列表
+    for image_path in images_path:
+        with Image.open(image_path) as img:
+            img_width, img_height = img.size
+            # 计算调整大小后的图像尺寸，保持纵横比
+            if img_width > img_height:
+                new_width = pdf.w
+                new_height = int((pdf.w / img_width) * img_height)
+            else:
+                new_height = pdf.h
+                new_width = int((pdf.h / img_height) * img_width)
+
+        print("insert " + image_path)
+        # 添加新的页面，并设置页面大小为图片大小
+        pdf.add_page(format=(new_width, new_height))
+        # 将图像插入到PDF中心
+        x = (pdf.w - new_width) / 2
+        y = (pdf.h - new_height) / 2
+        # 将图片添加到页面中，位置为(x, y)，大小为(new_width, new_height)
+        pdf.image(image_path, x=x, y=y, w=new_width, h=new_height)
+
+        # 更新进度条
+        progress = progress+1
+        update_progress(progress)
+    # 保存PDF文件到指定的路径
+    pdf.output(output_pdf_path)
+
+#
 def remove_watermark_thread():
+    select_button.config(state="disable")
 
     b_thread = threading.Thread(target=remove_watermark, )
 
@@ -169,7 +180,7 @@ def remove_watermark_thread():
 
     # 等待线程结束
     b_thread.join()
-def save_to_img(repaired_image,temp_dir_path):
+def save_to_img(repaired_image,temp_dir_path,):
     # 将修复后的图像转换为PIL.Image.Image对象
     repaired_img_pil = Image.fromarray(repaired_image)
 
@@ -289,8 +300,8 @@ remove_watermark_button = tk.Button(root, text="Remove Watermark", command=lambd
 remove_watermark_button.pack(pady=1)
 
 # 创建progressBar
-progressbar_len=300
-progressbar = ttk.Progressbar(root, length=progressbar_len, mode='determinate',maximum=progressbar_len)
+progressbar_len = 300
+progressbar = ttk.Progressbar(root, length=300, mode='determinate',maximum=progressbar_len)
 progressbar.pack(pady=1)
 
 
