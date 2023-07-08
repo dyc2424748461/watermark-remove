@@ -31,13 +31,16 @@ def select_pdf_file():
     重设进度条的maximum
     :return:
     """
-    global pdf_path, current_page, output_pdf_path,select_file_pages
+    global pdf_path, current_page, output_pdf_path,select_file_pages,progress
 
     # 将进度条更新为0
-    update_progress(0)
+    progress=0
+    update_progress(progress)
     # 重置显示的文件位置
     file_location.set("")
 
+    # 储存上一次打开的文件路径
+    last_pdf_path = pdf_path
     # 打开文件对话框以选择PDF文件
     pdf_path = filedialog.askopenfilename(filetypes=[("PDF Files", "*.pdf")])
     print("select:"+pdf_path)
@@ -49,12 +52,14 @@ def select_pdf_file():
         update_image()
         # 更新页面调节滑块的最大值
         page_slider.config(to=doc.page_count)
+    else:
+        pdf_path = last_pdf_path
 
-        # 更新进度条的总进度变量
-        progressbar.config(maximum=doc.page_count*2)
+    # 更新进度条的总进度变量
+    progressbar.config(maximum=doc.page_count*2)
 
-        # 关闭 PDF 文件
-        doc.close()
+    # 关闭 PDF 文件
+    doc.close()
 
 def update_image():
     """
@@ -107,7 +112,7 @@ def remove_watermark():
     :return:
     """
     global pdf_path, threshold_value, current_page,output_pdf_path,progress
-
+    progress = 0
     # 检查PDF路径是否为空
     if not pdf_path:
         return
@@ -126,8 +131,8 @@ def remove_watermark():
         page = doc.load_page(page_number)
 
         # 将页面转换为图像
-        pix = page.get_pixmap(dpi=170,)
-        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+        with page.get_pixmap(dpi=170,) as pix:
+            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
         img = img.convert("RGB")  # 将图像转换为RGB模式
 
         # 执行水印去除等处理
@@ -173,7 +178,7 @@ def insert_images_to_pdf(images_path, output_pdf_path,):
         with Image.open(image_path) as img:
             img_width, img_height = img.size
             # 计算调整大小后的图像尺寸，保持纵横比(a4大小)
-            # img_width,img_height = adjust_img(pdf,img_width,img_height)
+            img_width,img_height = adjust_img(pdf,img_width,img_height)
 
         print("insert " + image_path)
         # 添加新的页面，并设置页面大小为图片大小
@@ -187,6 +192,9 @@ def insert_images_to_pdf(images_path, output_pdf_path,):
         # 更新进度条
         progress = progress+1
         update_progress(progress)
+
+        # 更新显示的信息
+        file_location.set(f"insert {progress}/{progressbar.cget('maximum')}")
     # 保存PDF文件到指定的路径
     pdf.output(output_pdf_path)
 
@@ -206,6 +214,7 @@ def remove_watermark_thread():
     :return:
     """
     select_button.config(state="disable")
+    remove_watermark_button.config(state="disable")
 
     b_thread = threading.Thread(target=remove_watermark, )
 
@@ -214,6 +223,8 @@ def remove_watermark_thread():
 
     # 等待线程结束
     b_thread.join()
+    select_button.config(state="normal")
+    remove_watermark_button.config(state="normal")
 
 def save_to_img(repaired_image,temp_dir_path,):
     """
