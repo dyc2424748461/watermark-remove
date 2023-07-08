@@ -1,4 +1,5 @@
+fpdf2==2.7.4
 numpy==1.24.3
 opencv_python==4.7.0.72
 Pillow==9.3.0
-PyMuPDF==1.21.0
+PyMuPDF==1.22.3
