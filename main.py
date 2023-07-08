@@ -111,7 +111,7 @@ def remove_watermark():
     去除水印
     :return:
     """
-    global pdf_path, threshold_value, current_page,output_pdf_path,progress
+    global pdf_path, threshold_value, current_page,output_pdf_path,progress,dpi
     progress = 0
     # 检查PDF路径是否为空
     if not pdf_path:
@@ -131,7 +131,7 @@ def remove_watermark():
         page = doc.load_page(page_number)
 
         # 将页面转换为图像
-        with page.get_pixmap(dpi=170,) as pix:
+        with page.get_pixmap(dpi=dpi,) as pix:
             img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
         img = img.convert("RGB")  # 将图像转换为RGB模式
 
