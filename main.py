@@ -1,7 +1,6 @@
 import tkinter as tk
 from tkinter import filedialog
 import cv2
-import fpdf
 from PIL import ImageTk, Image
 import numpy as np
 import tempfile
@@ -11,13 +10,8 @@ import fitz
 from fpdf import FPDF
 # 使用fitz进行读取
 # 使用fpdf进行合并图片
-"""
-调整高dpi参数可以使得图片更清晰
-同时会消耗大量的内存
-"""
 
 # 全局变量
-dpi = 170
 pdf_path = ""
 output_pdf_path = ""
 current_page = 0
@@ -25,12 +19,6 @@ threshold_value = 128
 progress = 0
 
 def select_pdf_file():
-    """
-    选择文件功能、
-    更新全局pdf_path、
-    重设进度条的maximum
-    :return:
-    """
     global pdf_path, current_page, output_pdf_path,select_file_pages
 
     # 将进度条更新为0
@@ -57,10 +45,6 @@ def select_pdf_file():
         doc.close()
 
 def update_image():
-    """
-    更新ui界面中显示的图像
-    :return:
-    """
     global pdf_path, current_page, threshold_value
 
     # 检查PDF路径是否为空
@@ -102,10 +86,6 @@ def update_image():
     doc.close()
 
 def remove_watermark():
-    """
-    去除水印
-    :return:
-    """
     global pdf_path, threshold_value, current_page,output_pdf_path,progress
 
     # 检查PDF路径是否为空
@@ -158,12 +138,6 @@ def remove_watermark():
 
 
 def insert_images_to_pdf(images_path, output_pdf_path,):
-    """
-    将图片合并为pdf
-    :param images_path:
-    :param output_pdf_path:
-    :return:
-    """
     global progress
 
     # 创建一个FPDF对象
@@ -172,17 +146,22 @@ def insert_images_to_pdf(images_path, output_pdf_path,):
     for image_path in images_path:
         with Image.open(image_path) as img:
             img_width, img_height = img.size
-            # 计算调整大小后的图像尺寸，保持纵横比(a4大小)
-            # img_width,img_height = adjust_img(pdf,img_width,img_height)
+            # 计算调整大小后的图像尺寸，保持纵横比
+            if img_width > img_height:
+                new_width = pdf.w
+                new_height = int((pdf.w / img_width) * img_height)
+            else:
+                new_height = pdf.h
+                new_width = int((pdf.h / img_height) * img_width)
 
         print("insert " + image_path)
         # 添加新的页面，并设置页面大小为图片大小
-        pdf.add_page(format=(img_width, img_height))
+        pdf.add_page(format=(new_width, new_height))
         # 将图像插入到PDF中心
-        x = (pdf.w - img_width) / 2
-        y = (pdf.h - img_height) / 2
+        x = (pdf.w - new_width) / 2
+        y = (pdf.h - new_height) / 2
         # 将图片添加到页面中，位置为(x, y)，大小为(new_width, new_height)
-        pdf.image(image_path, x=x, y=y, w=img_width, h=img_height)
+        pdf.image(image_path, x=x, y=y, w=new_width, h=new_height)
 
         # 更新进度条
         progress = progress+1
@@ -190,21 +169,8 @@ def insert_images_to_pdf(images_path, output_pdf_path,):
     # 保存PDF文件到指定的路径
     pdf.output(output_pdf_path)
 
-def adjust_img(pdf:fpdf.FPDF,img_width,img_height):
-    # 计算调整大小后的图像尺寸，保持纵横比
-    if img_width > img_height:
-        new_width = pdf.w
-        new_height = int((pdf.w / img_width) * img_height)
-    else:
-        new_height = pdf.h
-        new_width = int((pdf.h / img_height) * img_width)
-    return new_width,new_height
 #
 def remove_watermark_thread():
-    """
-    去除水印线程
-    :return:
-    """
     select_button.config(state="disable")
 
     b_thread = threading.Thread(target=remove_watermark, )
@@ -214,14 +180,7 @@ def remove_watermark_thread():
 
     # 等待线程结束
     b_thread.join()
-
 def save_to_img(repaired_image,temp_dir_path,):
-    """
-    将pdf保存为图片
-    :param repaired_image:
-    :param temp_dir_path:
-    :return:
-    """
     # 将修复后的图像转换为PIL.Image.Image对象
     repaired_img_pil = Image.fromarray(repaired_image)
 
@@ -253,12 +212,6 @@ def update_threshold(value):
 
 
 def remove_watermark_gray(img, threshold_value,):
-    """
-    将原pdf图像的处理
-    :param img:
-    :param threshold_value:
-    :return:
-    """
     img = np.array(img)
     # 将图像转换为灰度图像
     img_gray = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2GRAY)
