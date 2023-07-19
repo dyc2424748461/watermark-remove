@@ -158,6 +158,7 @@ def remove_watermark():
 
     # temp_dir.cleanup()
     file_location.set(output_pdf_path)
+    copy_bookmarks(pdf_path,output_pdf_path)
     print("PDF生成完成！")
     select_button.config(state="normal")
 
@@ -308,6 +309,17 @@ def thread_it(func,):
     myThread = threading.Thread(target=func, )
     myThread .setDaemon(True)  # 主线程退出就直接让子线程跟随退出,不论是否运行完成。
     myThread .start()
+
+def copy_bookmarks(source_pdf,target_pdf):
+    # copy bookmarks
+    source_doc = fitz.open(source_pdf)
+    source_toc = source_doc.get_toc()
+    if source_toc:
+        target_doc = fitz.open(target_pdf)
+        target_doc.set_toc(source_toc)
+        target_doc.saveIncr()
+        target_doc.close()
+    source_doc.close()
 
 # 创建主窗口
 root = tk.Tk()
